@@ -1,0 +1,27 @@
+{
+  "name": "salonos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SalonOS - Plataforma de gestión para salón de belleza",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=packages/backend",
+    "dev:public": "npm run dev --workspace=packages/frontend-public",
+    "dev:pwa": "npm run dev --workspace=packages/frontend-pwa",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:public\" \"npm run dev:pwa\"",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "audit:ci": "audit-ci --high"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "audit-ci": "^6.6.1"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

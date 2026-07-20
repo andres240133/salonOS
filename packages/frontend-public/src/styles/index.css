@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Fondos (Neutros Oscuros) */
+  --color-bg-base: #0F0F0F;
+  --color-bg-card: #1A1A1A;
+  --color-bg-elevated: #2A2A2A;
+
+  /* Colores de Marca (Dorados) */
+  --color-primary: #D4AF37;
+  --color-primary-hover: #B8960C;
+  --color-primary-light: #F5E27A;
+
+  /* Textos */
+  --color-text-primary: #F5F5F5;
+  --color-text-secondary: #A0A0A0;
+  --color-text-muted: #6B7280;
+
+  /* Acentos Semánticos */
+  --color-success: #16A34A;
+  --color-danger: #DC2626;
+
+  /* Bordes */
+  --color-border-gold: rgba(212, 175, 55, 0.2);
+  --color-border-light: rgba(245, 245, 245, 0.1);
+
+  /* Sombras y Resplandores */
+  --shadow-gold-sm: 0 2px 8px rgba(212, 175, 55, 0.08);
+  --shadow-gold-md: 0 4px 20px rgba(212, 175, 55, 0.15);
+  --glow-gold: 0 0 12px rgba(212, 175, 55, 0.25);
+  --glow-danger: 0 0 12px rgba(220, 38, 38, 0.25);
+}
+
+@layer base {
+  html {
+    /* Previene zoom automático en inputs en iOS Safari */
+    -webkit-text-size-adjust: 100%;
+    font-size: 16px;
+  }
+
+  body {
+    background-color: var(--color-bg-base);
+    color: var(--color-text-primary);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Cormorant Garamond', 'Georgia', serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Ocultar scrollbar horizontal en chips de filtro */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

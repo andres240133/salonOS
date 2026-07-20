@@ -1,0 +1,95 @@
+name: SalonOS CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies (high+critical block)
+        run: npx audit-ci --high
+
+  typecheck:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check — backend
+        run: npm run typecheck --workspace=packages/backend
+
+      - name: Type check — frontend-public
+        run: npm run typecheck --workspace=packages/frontend-public
+
+      - name: Type check — frontend-pwa
+        run: npm run typecheck --workspace=packages/frontend-pwa
+
+  test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: salonos_test
+          POSTGRES_PASSWORD: salonos_test_password
+          POSTGRES_DB: salonos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://salonos_test:salonos_test_password@localhost:5432/salonos_test
+        run: psql $DATABASE_URL -f packages/backend/src/database/migrations/001_initial_schema.sql
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://salonos_test:salonos_test_password@localhost:5432/salonos_test
+          NODE_ENV: test
+          JWT_SECRET: ci_test_secret_64_bytes_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          JWT_REFRESH_SECRET: ci_test_refresh_secret_64_bytes_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          ENCRYPTION_KEY: aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899
+          SYSTEM_SALT: 1122334455667788990011223344556677889900112233445566778899001122
+          AUDIT_SALT: 9988776655443322110099887766554433221100998877665544332211009988
+        run: npm run test --workspace=packages/backend
