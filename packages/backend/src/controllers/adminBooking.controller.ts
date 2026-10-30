@@ -16,15 +16,15 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 // ── Schemas de Validación ───────────────────────────────────
 
-const uuidParamSchema = z.string().uuid('ID de cita inválido');
+const uuidParamSchema = z.uuid({ error: 'ID de cita inválido' });
 
 const completeBookingSchema = z.object({
   amount: z
-    .number({ invalid_type_error: 'El monto debe ser un número' })
-    .min(0, 'El monto no puede ser negativo')
-    .max(99999999.99, 'El monto excede el límite permitido'),
+    .number({ error: 'El monto debe ser un número' })
+    .min(0, { error: 'El monto no puede ser negativo' })
+    .max(99999999.99, { error: 'El monto excede el límite permitido' }),
   paymentMethod: z.enum(['cash', 'transfer', 'card'], {
-    errorMap: () => ({ message: 'Método de pago inválido (cash, transfer, card)' }),
+    error: 'Método de pago inválido (cash, transfer, card)',
   }),
 });
 
@@ -32,16 +32,16 @@ const cancelBookingSchema = z.object({
   reason: z
     .string()
     .trim()
-    .max(300, 'El motivo no puede superar los 300 caracteres')
+    .max(300, { error: 'El motivo no puede superar los 300 caracteres' })
     .optional(),
 });
 
 const createAdminBookingSchema = z.object({
-  serviceId: z.number().int().positive('Seleccione un servicio válido'),
-  scheduledAt: z.string().datetime({ offset: true, message: 'Formato de fecha y hora ISO inválido' }),
-  clientName: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres').max(100),
-  clientPhone: z.string().trim().min(1, 'El teléfono es requerido').max(30),
-  notes: z.string().max(500, 'Las notas no pueden superar 500 caracteres').optional(),
+  serviceId: z.number().int().positive({ error: 'Seleccione un servicio válido' }),
+  scheduledAt: z.iso.datetime({ offset: true, error: 'Formato de fecha y hora ISO inválido' }),
+  clientName: z.string().trim().min(2, { error: 'El nombre debe tener al menos 2 caracteres' }).max(100),
+  clientPhone: z.string().trim().min(1, { error: 'El teléfono es requerido' }).max(30),
+  notes: z.string().max(500, { error: 'Las notas no pueden superar 500 caracteres' }).optional(),
 });
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -142,7 +142,7 @@ export async function completeAdminBooking(req: Request, res: Response): Promise
   if (!bodyParsed.success) {
     res.status(400).json({
       error: 'Datos de pago inválidos',
-      details: bodyParsed.error.flatten().fieldErrors,
+      details: z.flattenError(bodyParsed.error).fieldErrors,
     });
     return;
   }
@@ -210,7 +210,7 @@ export async function cancelAdminBooking(req: Request, res: Response): Promise<v
   if (!bodyParsed.success) {
     res.status(400).json({
       error: 'Datos de cancelación inválidos',
-      details: bodyParsed.error.flatten().fieldErrors,
+      details: z.flattenError(bodyParsed.error).fieldErrors,
     });
     return;
   }
@@ -270,7 +270,7 @@ export async function createAdminBooking(req: Request, res: Response): Promise<v
   if (!parsed.success) {
     res.status(400).json({
       error: 'Datos inválidos',
-      details: parsed.error.flatten().fieldErrors,
+      details: z.flattenError(parsed.error).fieldErrors,
     });
     return;
   }

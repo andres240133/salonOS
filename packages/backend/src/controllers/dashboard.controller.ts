@@ -8,8 +8,8 @@ import { pool } from '../config/database.js';
 // o bien ingresar fechas manuales 'startDate' y 'endDate' en formato ISO 8601.
 const getFinanceMetricsSchema = z.object({
   range: z.enum(['week', 'month', 'year']).optional(),
-  startDate: z.string().datetime({ message: 'startDate debe ser un ISO string válido' }).optional(),
-  endDate: z.string().datetime({ message: 'endDate debe ser un ISO string válido' }).optional(),
+  startDate: z.iso.datetime({ error: 'startDate debe ser un ISO string válido' }).optional(),
+  endDate: z.iso.datetime({ error: 'endDate debe ser un ISO string válido' }).optional(),
 }).refine(
   (data) => {
     // Si se especifica una fecha manual, se debe especificar obligatoriamente la otra
@@ -20,7 +20,7 @@ const getFinanceMetricsSchema = z.object({
     return true;
   },
   {
-    message: 'Se deben proveer ambos startDate y endDate, o ninguno.',
+    error: 'Se deben proveer ambos startDate y endDate, o ninguno.',
     path: ['startDate'],
   }
 );
@@ -103,7 +103,7 @@ export async function getFinanceMetrics(req: Request, res: Response): Promise<vo
   if (!parsed.success) {
     res.status(400).json({
       error: 'Parámetros de consulta inválidos',
-      details: parsed.error.flatten().fieldErrors,
+      details: z.flattenError(parsed.error).fieldErrors,
     });
     return;
   }
@@ -135,10 +135,10 @@ export async function getFinanceMetrics(req: Request, res: Response): Promise<vo
 }
 
 const createExpenseSchema = z.object({
-  description: z.string().min(2, 'Descripción muy corta').max(255),
-  amount: z.number().positive('El monto debe ser un número positivo').max(99999999.99, 'Monto demasiado alto'),
+  description: z.string().min(2, { error: 'Descripción muy corta' }).max(255),
+  amount: z.number().positive({ error: 'El monto debe ser un número positivo' }).max(99999999.99, { error: 'Monto demasiado alto' }),
   category: z.enum(['supplies', 'rent', 'utilities', 'marketing', 'other']),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: 'Formato de fecha inválido (YYYY-MM-DD)' }),
 });
 
 /**
@@ -155,7 +155,7 @@ export async function createExpense(req: Request, res: Response): Promise<void> 
   if (!parsed.success) {
     res.status(400).json({
       error: 'Datos del gasto inválidos',
-      details: parsed.error.flatten().fieldErrors,
+      details: z.flattenError(parsed.error).fieldErrors,
     });
     return;
   }
@@ -181,10 +181,10 @@ export async function createExpense(req: Request, res: Response): Promise<void> 
 
 // ── Esquema Zod para la creación de ingresos manuales ──────────────────
 const createManualIncomeSchema = z.object({
-  description: z.string().min(2, 'Descripción muy corta').max(255),
-  amount: z.number().positive('El monto debe ser un número positivo').max(99999999.99, 'Monto demasiado alto'),
+  description: z.string().min(2, { error: 'Descripción muy corta' }).max(255),
+  amount: z.number().positive({ error: 'El monto debe ser un número positivo' }).max(99999999.99, { error: 'Monto demasiado alto' }),
   category: z.enum(['product_sale', 'walk_in_service', 'other']),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: 'Formato de fecha inválido (YYYY-MM-DD)' }),
 });
 
 /**
@@ -201,7 +201,7 @@ export async function createManualIncome(req: Request, res: Response): Promise<v
   if (!parsed.success) {
     res.status(400).json({
       error: 'Datos del ingreso inválidos',
-      details: parsed.error.flatten().fieldErrors,
+      details: z.flattenError(parsed.error).fieldErrors,
     });
     return;
   }

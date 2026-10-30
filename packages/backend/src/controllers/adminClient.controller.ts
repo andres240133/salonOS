@@ -7,16 +7,16 @@ import { safeDecryptField } from '../services/pii.js';
 
 const clientIdParamSchema = z.coerce
   .number()
-  .int('ID de clienta inválido')
-  .positive('ID de clienta inválido');
+  .int({ error: 'ID de clienta inválido' })
+  .positive({ error: 'ID de clienta inválido' });
 
 const saveFormulaSchema = z.object({
-  bookingId: z.string().uuid('ID de cita inválido'),
+  bookingId: z.uuid({ error: 'ID de cita inválido' }),
   formula: z
-    .string({ required_error: 'La fórmula es requerida' })
+    .string({ error: 'La fórmula es requerida' })
     .trim()
-    .min(1, 'La fórmula no puede estar vacía')
-    .max(1000, 'La fórmula no puede superar los 1000 caracteres'),
+    .min(1, { error: 'La fórmula no puede estar vacía' })
+    .max(1000, { error: 'La fórmula no puede superar los 1000 caracteres' }),
 });
 
 // ── Handlers ────────────────────────────────────────────────
@@ -140,7 +140,7 @@ export async function saveClientFormula(req: Request, res: Response): Promise<vo
   if (!bodyParsed.success) {
     res.status(400).json({
       error: 'Datos inválidos',
-      details: bodyParsed.error.flatten().fieldErrors,
+      details: z.flattenError(bodyParsed.error).fieldErrors,
     });
     return;
   }

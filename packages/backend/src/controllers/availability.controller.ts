@@ -54,11 +54,11 @@ function getCurrentMondayCR(todayCR: string): string {
 
 const getAvailabilityQuerySchema = z
   .object({
-    from: z.string().refine(isValidDateString, 'Formato de fecha from inválido (YYYY-MM-DD)'),
-    to: z.string().refine(isValidDateString, 'Formato de fecha to inválido (YYYY-MM-DD)'),
+    from: z.string().refine(isValidDateString, { error: 'Formato de fecha from inválido (YYYY-MM-DD)' }),
+    to: z.string().refine(isValidDateString, { error: 'Formato de fecha to inválido (YYYY-MM-DD)' }),
   })
   .refine((data) => data.to >= data.from, {
-    message: 'La fecha final (to) debe ser mayor o igual a la fecha inicial (from)',
+    error: 'La fecha final (to) debe ser mayor o igual a la fecha inicial (from)',
     path: ['to'],
   });
 
@@ -67,18 +67,18 @@ const weekDayInputSchema = z
     dayOfWeek: z
       .number()
       .int()
-      .min(1, 'Domingo (0) no es configurable; use valores de 1 (lunes) a 6 (sábado)')
-      .max(6, 'dayOfWeek debe estar entre 1 (lunes) y 6 (sábado)'),
-    startTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
-    lastStartTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
-    endTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
+      .min(1, { error: 'Domingo (0) no es configurable; use valores de 1 (lunes) a 6 (sábado)' })
+      .max(6, { error: 'dayOfWeek debe estar entre 1 (lunes) y 6 (sábado)' }),
+    startTime: z.string().regex(TIME_REGEX, { error: 'Formato de hora inválido (HH:MM)' }),
+    lastStartTime: z.string().regex(TIME_REGEX, { error: 'Formato de hora inválido (HH:MM)' }),
+    endTime: z.string().regex(TIME_REGEX, { error: 'Formato de hora inválido (HH:MM)' }),
   })
   .refine((day) => timeToMinutes(day.startTime) <= timeToMinutes(day.lastStartTime), {
-    message: 'La última cita (lastStartTime) debe ser igual o posterior a la primera cita (startTime)',
+    error: 'La última cita (lastStartTime) debe ser igual o posterior a la primera cita (startTime)',
     path: ['lastStartTime'],
   })
   .refine((day) => timeToMinutes(day.lastStartTime) < timeToMinutes(day.endTime), {
-    message: 'La hora de cierre (endTime) debe ser posterior a la última cita (lastStartTime)',
+    error: 'La hora de cierre (endTime) debe ser posterior a la última cita (lastStartTime)',
     path: ['endTime'],
   });
 
@@ -86,10 +86,10 @@ const saveWeekSchema = z
   .object({
     weekStart: z
       .string()
-      .refine(isValidDateString, 'Formato de weekStart inválido (YYYY-MM-DD)')
+      .refine(isValidDateString, { error: 'Formato de weekStart inválido (YYYY-MM-DD)' })
       .refine(
         (val) => new Date(`${val}T12:00:00Z`).getUTCDay() === 1,
-        'weekStart debe corresponder a un día lunes',
+        { error: 'weekStart debe corresponder a un día lunes' },
       ),
     days: z.array(weekDayInputSchema).max(6),
   })
@@ -103,7 +103,7 @@ const saveWeekSchema = z
       return true;
     },
     {
-      message: 'No se permiten días duplicados en la misma semana',
+      error: 'No se permiten días duplicados en la misma semana',
       path: ['days'],
     },
   );
@@ -113,19 +113,19 @@ const templateItemSchema = z
     dayOfWeek: z
       .number()
       .int()
-      .min(1, 'Domingo (0) no es configurable; use valores de 1 (lunes) a 6 (sábado)')
-      .max(6, 'dayOfWeek debe estar entre 1 (lunes) y 6 (sábado)'),
-    startTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
-    lastStartTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
-    endTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
+      .min(1, { error: 'Domingo (0) no es configurable; use valores de 1 (lunes) a 6 (sábado)' })
+      .max(6, { error: 'dayOfWeek debe estar entre 1 (lunes) y 6 (sábado)' }),
+    startTime: z.string().regex(TIME_REGEX, { error: 'Formato de hora inválido (HH:MM)' }),
+    lastStartTime: z.string().regex(TIME_REGEX, { error: 'Formato de hora inválido (HH:MM)' }),
+    endTime: z.string().regex(TIME_REGEX, { error: 'Formato de hora inválido (HH:MM)' }),
     isActive: z.boolean(),
   })
   .refine((item) => timeToMinutes(item.startTime) <= timeToMinutes(item.lastStartTime), {
-    message: 'La última cita (lastStartTime) debe ser igual o posterior a la primera cita (startTime)',
+    error: 'La última cita (lastStartTime) debe ser igual o posterior a la primera cita (startTime)',
     path: ['lastStartTime'],
   })
   .refine((item) => timeToMinutes(item.lastStartTime) < timeToMinutes(item.endTime), {
-    message: 'La hora de cierre (endTime) debe ser posterior a la última cita (lastStartTime)',
+    error: 'La hora de cierre (endTime) debe ser posterior a la última cita (lastStartTime)',
     path: ['endTime'],
   });
 
@@ -143,7 +143,7 @@ const updateTemplatesSchema = z
       return true;
     },
     {
-      message: 'No se permiten días duplicados en las plantillas',
+      error: 'No se permiten días duplicados en las plantillas',
       path: ['templates'],
     },
   );
@@ -168,7 +168,7 @@ export async function getAvailabilityRange(req: Request, res: Response): Promise
   if (!parsed.success) {
     res.status(400).json({
       error: 'Parámetros de consulta inválidos',
-      details: parsed.error.flatten().fieldErrors,
+      details: z.flattenError(parsed.error).fieldErrors,
     });
     return;
   }
@@ -221,7 +221,7 @@ export async function saveWeekAvailability(req: Request, res: Response): Promise
   if (!parsed.success) {
     res.status(400).json({
       error: 'Datos de disponibilidad inválidos',
-      details: parsed.error.flatten().fieldErrors,
+      details: z.flattenError(parsed.error).fieldErrors,
     });
     return;
   }
@@ -391,7 +391,7 @@ export async function updateTemplates(req: Request, res: Response): Promise<void
   if (!parsed.success) {
     res.status(400).json({
       error: 'Datos de plantillas inválidos',
-      details: parsed.error.flatten().fieldErrors,
+      details: z.flattenError(parsed.error).fieldErrors,
     });
     return;
   }

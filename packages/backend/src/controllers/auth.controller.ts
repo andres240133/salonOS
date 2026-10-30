@@ -15,8 +15,8 @@ import {
 } from '../models/auth.js';
 
 const loginSchema = z.object({
-  email: z.string().email('Email inválido'),
-  password: z.string().min(1, 'Contraseña requerida'),
+  email: z.email({ error: 'Email inválido' }),
+  password: z.string().min(1, { error: 'Contraseña requerida' }),
 });
 
 const REFRESH_COOKIE = 'refresh_token';

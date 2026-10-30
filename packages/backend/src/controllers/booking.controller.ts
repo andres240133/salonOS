@@ -25,11 +25,11 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const createBookingSchema = z.object({
   serviceId:   z.number().int().positive(),
-  date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
-  startTime:   z.string().regex(/^\d{2}:\d{2}$/, 'Formato de hora inválido (HH:MM)'),
-  clientName:  z.string().min(2, 'Nombre muy corto').max(100),
-  clientPhone: z.string().min(1, 'Teléfono requerido').max(30),
-  notes:       z.string().max(500, 'Las notas no pueden superar 500 caracteres').optional(),
+  date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: 'Formato de fecha inválido (YYYY-MM-DD)' }),
+  startTime:   z.string().regex(/^\d{2}:\d{2}$/, { error: 'Formato de hora inválido (HH:MM)' }),
+  clientName:  z.string().min(2, { error: 'Nombre muy corto' }).max(100),
+  clientPhone: z.string().min(1, { error: 'Teléfono requerido' }).max(30),
+  notes:       z.string().max(500, { error: 'Las notas no pueden superar 500 caracteres' }).optional(),
 });
 
 const updateStatusSchema = z.object({
@@ -85,7 +85,7 @@ export async function create(req: Request, res: Response): Promise<void> {
   if (!parsed.success) {
     res.status(400).json({
       error: 'Datos inválidos',
-      details: parsed.error.flatten().fieldErrors,
+      details: z.flattenError(parsed.error).fieldErrors,
     });
     return;
   }
