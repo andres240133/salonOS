@@ -40,3 +40,5 @@ coverage/
 
 # Railway
 .railway/
+
+create_admin_user.sql
