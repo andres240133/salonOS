@@ -131,10 +131,21 @@ export async function authFetch(
 
 // ── Typed Admin API Functions ─────────────────────────────────────────────────
 
-/** Fetches today's bookings for the admin agenda view. */
-export async function fetchTodayBookings(): Promise<AdminBooking[]> {
-  const res = await authFetch('/api/admin/bookings/today');
-  if (!res.ok) throw new Error(`Failed to fetch bookings: ${res.status}`);
+/** Helper to extract a human-readable error message from a non-OK backend JSON response. */
+async function extractApiError(res: Response, fallbackPrefix: string): Promise<Error> {
+  const body = await res.json().catch(() => ({}));
+  const detailsMsg =
+    body.details && typeof body.details === 'object'
+      ? Object.values(body.details as Record<string, string[]>).flat().join(', ')
+      : '';
+  return new Error(detailsMsg || body.error || `${fallbackPrefix} (${res.status})`);
+}
+
+/** Fetches bookings for a given date (YYYY-MM-DD, defaults to today in CR) for the admin agenda view. */
+export async function fetchTodayBookings(date?: string): Promise<AdminBooking[]> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  const res = await authFetch(`/api/admin/bookings/today${query}`);
+  if (!res.ok) throw await extractApiError(res, 'No se pudieron cargar las citas');
   const data: { bookings: AdminBooking[] } = await res.json();
   return data.bookings;
 }
@@ -150,7 +161,7 @@ export async function completeBooking(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ amount, paymentMethod }),
   });
-  if (!res.ok) throw new Error(`Failed to complete booking: ${res.status}`);
+  if (!res.ok) throw await extractApiError(res, 'No se pudo completar la cita');
 }
 
 /** Cancels a booking with an optional reason. */
@@ -160,7 +171,7 @@ export async function cancelBooking(id: string, reason?: string): Promise<void> 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ reason }),
   });
-  if (!res.ok) throw new Error(`Failed to cancel booking: ${res.status}`);
+  if (!res.ok) throw await extractApiError(res, 'No se pudo cancelar la cita');
 }
 
 /** Creates a manual admin booking. */
@@ -170,7 +181,7 @@ export async function createAdminBooking(payload: CreateAdminBookingPayload): Pr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(`Failed to create booking: ${res.status}`);
+  if (!res.ok) throw await extractApiError(res, 'No se pudo crear la cita');
 }
 
 /** Fetches the service catalog (public endpoint, no auth needed). */
@@ -309,6 +320,7 @@ export async function updateTechnicalFormula(
 export interface AvailabilityDay {
   date: string;
   startTime: string;
+  lastStartTime: string;
   endTime: string;
   isActive: boolean;
 }
@@ -316,6 +328,7 @@ export interface AvailabilityDay {
 export interface AvailabilityTemplate {
   dayOfWeek: number;
   startTime: string;
+  lastStartTime: string;
   endTime: string;
   isActive: boolean;
 }
@@ -323,6 +336,7 @@ export interface AvailabilityTemplate {
 export interface WeekDayInput {
   dayOfWeek: number;
   startTime: string;
+  lastStartTime: string;
   endTime: string;
 }
 

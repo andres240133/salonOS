@@ -59,9 +59,14 @@ export async function getAvailableSlots(
   date: string,
   serviceId: number,
 ): Promise<TimeSlot[]> {
-  const { rows: availRows } = await pool.query<{ start_time: string; end_time: string }>(
-    `SELECT TO_CHAR(start_time, 'HH24:MI') AS start_time,
-            TO_CHAR(end_time,   'HH24:MI') AS end_time
+  const { rows: availRows } = await pool.query<{
+    start_time: string;
+    last_start_time: string;
+    end_time: string;
+  }>(
+    `SELECT TO_CHAR(start_time,      'HH24:MI') AS start_time,
+            TO_CHAR(last_start_time, 'HH24:MI') AS last_start_time,
+            TO_CHAR(end_time,        'HH24:MI') AS end_time
      FROM availability_slots
      WHERE date = $1 AND is_active = true`,
     [date],
@@ -70,6 +75,7 @@ export async function getAvailableSlots(
   if (availRows.length === 0) return [];
 
   const windowStart = timeToMinutes(availRows[0].start_time);
+  const lastStart   = timeToMinutes(availRows[0].last_start_time);
   const windowEnd   = timeToMinutes(availRows[0].end_time);
 
   const { rows: svcRows } = await pool.query<{ duration_minutes: number }>(
@@ -115,8 +121,10 @@ export async function getAvailableSlots(
 
   const slots: TimeSlot[] = [];
 
-  for (let slotStart = windowStart; slotStart + duration <= windowEnd; slotStart += SLOT_GRANULARITY_MINUTES) {
-    const slotEnd   = slotStart + duration;
+  for (let slotStart = windowStart; slotStart <= lastStart; slotStart += SLOT_GRANULARITY_MINUTES) {
+    const slotEnd = slotStart + duration;
+    if (slotEnd > windowEnd) continue;
+
     const slotRange: MinuteRange = { start: slotStart, end: slotEnd };
 
     if (blocks.some(b => rangesOverlap(slotRange, b))) continue;
@@ -153,9 +161,10 @@ export async function getAvailableSlots(
  *    (phantom reads): si dos requests llegan simultáneamente a un slot vacío, ambos
  *    leerían "0 solapamientos" y procederían a insertar, excediendo la capacidad.
  *
- * 2. SELECT COUNT(*) ... FOR UPDATE
- *    Bloquea las filas de bookings existentes que se solapan, previniendo que otra
- *    transacción cambie su estado (e.g., cancelación) entre la verificación y el INSERT.
+ * 2. Subconsulta SELECT 1 ... FOR UPDATE + COUNT(*) externo
+ *    Bloquea las filas de bookings existentes que se solapan en una subconsulta
+ *    (PostgreSQL no permite FOR UPDATE directamente con funciones de agregación),
+ *    previniendo que otra transacción cambie su estado entre la verificación y el INSERT.
  *
  * El BUFFER_MINUTES (90 min) expande la ventana de verificación para representar
  * el ciclo completo de atención del salón.
@@ -170,11 +179,14 @@ export async function isSlotAvailable(
 
   const { rows } = await client.query<{ overlap_count: string }>(
     `SELECT COUNT(*) AS overlap_count
-     FROM bookings
-     WHERE status IN ('pending', 'confirmed')
-       AND scheduled_at < (($1 || ' ' || $3)::timestamp AT TIME ZONE $4) + ($5 || ' minutes')::interval
-       AND (scheduled_at + (duration_minutes || ' minutes')::interval) > (($1 || ' ' || $2)::timestamp AT TIME ZONE $4) - ($5 || ' minutes')::interval
-     FOR UPDATE`,
+     FROM (
+       SELECT 1
+       FROM bookings
+       WHERE status IN ('pending', 'confirmed')
+         AND scheduled_at < (($1 || ' ' || $3)::timestamp AT TIME ZONE $4) + ($5 || ' minutes')::interval
+         AND (scheduled_at + (duration_minutes || ' minutes')::interval) > (($1 || ' ' || $2)::timestamp AT TIME ZONE $4) - ($5 || ' minutes')::interval
+       FOR UPDATE
+     ) AS locked`,
     [date, startTime, endTime, TIMEZONE, BUFFER_MINUTES],
   );
 

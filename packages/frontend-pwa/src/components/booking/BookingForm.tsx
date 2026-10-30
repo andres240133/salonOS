@@ -136,9 +136,7 @@ function BookingForm() {
     setSubmitting(true);
 
     // Costa Rica has no DST, always UTC-6
-    const scheduledAt = new Date(
-      `${selectedSlot.date}T${selectedSlot.time}:00-06:00`,
-    ).toISOString();
+    const scheduledAt = `${selectedSlot.date}T${selectedSlot.time}:00-06:00`;
 
     try {
       // Persist contact info for the ConfirmationScreen

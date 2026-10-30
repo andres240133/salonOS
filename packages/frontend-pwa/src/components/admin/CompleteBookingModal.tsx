@@ -45,8 +45,12 @@ function CompleteBookingModal({
     try {
       await completeBooking(bookingId, numAmount, paymentMethod);
       onSuccess();
-    } catch {
-      setError('No se pudo completar la cita. Intentá de nuevo.');
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo completar la cita. Intentá de nuevo.',
+      );
     } finally {
       setIsSubmitting(false);
     }

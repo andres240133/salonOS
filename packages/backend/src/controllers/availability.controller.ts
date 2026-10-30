@@ -70,10 +70,15 @@ const weekDayInputSchema = z
       .min(1, 'Domingo (0) no es configurable; use valores de 1 (lunes) a 6 (sábado)')
       .max(6, 'dayOfWeek debe estar entre 1 (lunes) y 6 (sábado)'),
     startTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
+    lastStartTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
     endTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
   })
-  .refine((day) => timeToMinutes(day.endTime) > timeToMinutes(day.startTime), {
-    message: 'La hora de salida (endTime) debe ser posterior a la de entrada (startTime)',
+  .refine((day) => timeToMinutes(day.startTime) <= timeToMinutes(day.lastStartTime), {
+    message: 'La última cita (lastStartTime) debe ser igual o posterior a la primera cita (startTime)',
+    path: ['lastStartTime'],
+  })
+  .refine((day) => timeToMinutes(day.lastStartTime) < timeToMinutes(day.endTime), {
+    message: 'La hora de cierre (endTime) debe ser posterior a la última cita (lastStartTime)',
     path: ['endTime'],
   });
 
@@ -111,11 +116,16 @@ const templateItemSchema = z
       .min(1, 'Domingo (0) no es configurable; use valores de 1 (lunes) a 6 (sábado)')
       .max(6, 'dayOfWeek debe estar entre 1 (lunes) y 6 (sábado)'),
     startTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
+    lastStartTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
     endTime: z.string().regex(TIME_REGEX, 'Formato de hora inválido (HH:MM)'),
     isActive: z.boolean(),
   })
-  .refine((item) => timeToMinutes(item.endTime) > timeToMinutes(item.startTime), {
-    message: 'La hora de salida (endTime) debe ser posterior a la de entrada (startTime)',
+  .refine((item) => timeToMinutes(item.startTime) <= timeToMinutes(item.lastStartTime), {
+    message: 'La última cita (lastStartTime) debe ser igual o posterior a la primera cita (startTime)',
+    path: ['lastStartTime'],
+  })
+  .refine((item) => timeToMinutes(item.lastStartTime) < timeToMinutes(item.endTime), {
+    message: 'La hora de cierre (endTime) debe ser posterior a la última cita (lastStartTime)',
     path: ['endTime'],
   });
 
@@ -169,12 +179,14 @@ export async function getAvailabilityRange(req: Request, res: Response): Promise
     const { rows } = await pool.query<{
       date: string;
       start_time: string;
+      last_start_time: string;
       end_time: string;
       is_active: boolean;
     }>(
       `SELECT
          TO_CHAR(date, 'YYYY-MM-DD') AS date,
          TO_CHAR(start_time, 'HH24:MI') AS start_time,
+         TO_CHAR(last_start_time, 'HH24:MI') AS last_start_time,
          TO_CHAR(end_time, 'HH24:MI') AS end_time,
          is_active
        FROM availability_slots
@@ -187,6 +199,7 @@ export async function getAvailabilityRange(req: Request, res: Response): Promise
       days: rows.map((r) => ({
         date: r.date,
         startTime: r.start_time,
+        lastStartTime: r.last_start_time,
         endTime: r.end_time,
         isActive: r.is_active,
       })),
@@ -242,9 +255,11 @@ export async function saveWeekAvailability(req: Request, res: Response): Promise
 
         if (dayConfig) {
           const newStartMin = timeToMinutes(dayConfig.startTime);
+          const newLastStartMin = timeToMinutes(dayConfig.lastStartTime);
           const newEndMin = timeToMinutes(dayConfig.endTime);
 
-          // Verificar si existen citas activas que queden fuera del nuevo rango horario
+          // Una cita queda fuera si empieza antes de startTime, empieza después de lastStartTime,
+          // o termina después de endTime (calculado en zona horaria America/Costa_Rica).
           const { rows: outsideRows } = await client.query<{ count: number }>(
             `SELECT COUNT(*)::int AS count
              FROM bookings
@@ -255,9 +270,12 @@ export async function saveWeekAvailability(req: Request, res: Response): Promise
                   EXTRACT(MINUTE FROM scheduled_at AT TIME ZONE $2)) < $3
                  OR
                  (EXTRACT(HOUR FROM scheduled_at AT TIME ZONE $2) * 60 +
-                  EXTRACT(MINUTE FROM scheduled_at AT TIME ZONE $2) + duration_minutes) > $4
+                  EXTRACT(MINUTE FROM scheduled_at AT TIME ZONE $2)) > $4
+                 OR
+                 (EXTRACT(HOUR FROM scheduled_at AT TIME ZONE $2) * 60 +
+                  EXTRACT(MINUTE FROM scheduled_at AT TIME ZONE $2) + duration_minutes) > $5
                )`,
-            [dateStr, TIMEZONE, newStartMin, newEndMin],
+            [dateStr, TIMEZONE, newStartMin, newLastStartMin, newEndMin],
           );
 
           const outsideCount = outsideRows[0]?.count ?? 0;
@@ -272,13 +290,14 @@ export async function saveWeekAvailability(req: Request, res: Response): Promise
           }
 
           await client.query(
-            `INSERT INTO availability_slots (date, start_time, end_time, is_active)
-             VALUES ($1::date, $2::time, $3::time, TRUE)
+            `INSERT INTO availability_slots (date, start_time, last_start_time, end_time, is_active)
+             VALUES ($1::date, $2::time, $3::time, $4::time, TRUE)
              ON CONFLICT (date) DO UPDATE
-               SET start_time = EXCLUDED.start_time,
-                   end_time = EXCLUDED.end_time,
-                   is_active = TRUE`,
-            [dateStr, dayConfig.startTime, dayConfig.endTime],
+               SET start_time      = EXCLUDED.start_time,
+                   last_start_time = EXCLUDED.last_start_time,
+                   end_time        = EXCLUDED.end_time,
+                   is_active       = TRUE`,
+            [dateStr, dayConfig.startTime, dayConfig.lastStartTime, dayConfig.endTime],
           );
         } else {
           // Día no incluido en el body: verificar citas antes de desactivar
@@ -332,12 +351,14 @@ export async function getTemplates(_req: Request, res: Response): Promise<void> 
     const { rows } = await pool.query<{
       day_of_week: number;
       start_time: string;
+      last_start_time: string;
       end_time: string;
       is_active: boolean;
     }>(
       `SELECT
          day_of_week,
          TO_CHAR(start_time, 'HH24:MI') AS start_time,
+         TO_CHAR(last_start_time, 'HH24:MI') AS last_start_time,
          TO_CHAR(end_time, 'HH24:MI') AS end_time,
          is_active
        FROM availability_templates
@@ -349,6 +370,7 @@ export async function getTemplates(_req: Request, res: Response): Promise<void> 
       templates: rows.map((r) => ({
         dayOfWeek: r.day_of_week,
         startTime: r.start_time,
+        lastStartTime: r.last_start_time,
         endTime: r.end_time,
         isActive: r.is_active,
       })),
@@ -378,25 +400,28 @@ export async function updateTemplates(req: Request, res: Response): Promise<void
     const updated = await withTransaction(async (client) => {
       for (const item of parsed.data.templates) {
         await client.query(
-          `INSERT INTO availability_templates (day_of_week, start_time, end_time, is_active)
-           VALUES ($1, $2::time, $3::time, $4)
+          `INSERT INTO availability_templates (day_of_week, start_time, last_start_time, end_time, is_active)
+           VALUES ($1, $2::time, $3::time, $4::time, $5)
            ON CONFLICT (day_of_week) DO UPDATE
-             SET start_time = EXCLUDED.start_time,
-                 end_time = EXCLUDED.end_time,
-                 is_active = EXCLUDED.is_active`,
-          [item.dayOfWeek, item.startTime, item.endTime, item.isActive],
+             SET start_time      = EXCLUDED.start_time,
+                 last_start_time = EXCLUDED.last_start_time,
+                 end_time        = EXCLUDED.end_time,
+                 is_active       = EXCLUDED.is_active`,
+          [item.dayOfWeek, item.startTime, item.lastStartTime, item.endTime, item.isActive],
         );
       }
 
       const { rows } = await client.query<{
         day_of_week: number;
         start_time: string;
+        last_start_time: string;
         end_time: string;
         is_active: boolean;
       }>(
         `SELECT
            day_of_week,
            TO_CHAR(start_time, 'HH24:MI') AS start_time,
+           TO_CHAR(last_start_time, 'HH24:MI') AS last_start_time,
            TO_CHAR(end_time, 'HH24:MI') AS end_time,
            is_active
          FROM availability_templates
@@ -407,6 +432,7 @@ export async function updateTemplates(req: Request, res: Response): Promise<void
       return rows.map((r) => ({
         dayOfWeek: r.day_of_week,
         startTime: r.start_time,
+        lastStartTime: r.last_start_time,
         endTime: r.end_time,
         isActive: r.is_active,
       }));

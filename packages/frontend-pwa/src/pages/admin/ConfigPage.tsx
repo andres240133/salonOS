@@ -20,6 +20,7 @@ interface DayFormRow {
   date: string;
   isActive: boolean;
   startTime: string;
+  lastStartTime: string;
   endTime: string;
   isPast: boolean;
 }
@@ -82,7 +83,7 @@ function getCurrentMondayCR(todayCR: string): string {
   return addDaysUTC(todayCR, diffToMonday);
 }
 
-/** Formatea YYYY-MM-DD a formato legible corto, ej: "Lun 2 nov". */
+/** Formatea YYYY-MM-DD a formato legible corto, ej: "Lunes 2 nov". */
 function formatDisplayDate(dateStr: string): string {
   const [, monthStr, dayStr] = dateStr.split('-');
   const dow = getDayOfWeekUTC(dateStr);
@@ -91,7 +92,16 @@ function formatDisplayDate(dateStr: string): string {
   return `${dayName} ${parseInt(dayStr, 10)} ${monthLabel}`;
 }
 
-/** Construye las 6 filas (Lun–Sáb) combinando slots existentes con el fallback de templates. */
+/** Convierte una hora 'HH:MM' (24 h) a formato 12 h, ej: '06:00' → '6:00 a.m.', '18:00' → '6:00 p.m.' */
+function formatTime12h(time24: string): string {
+  const [hStr, mStr] = time24.split(':');
+  const h = parseInt(hStr, 10);
+  const period = h >= 12 ? 'p.m.' : 'a.m.';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${mStr} ${period}`;
+}
+
+/** Construye las 6 filas (Lun–Sáb) combinando slots existentes con el fallback de templates y defaults. */
 function buildWeekRows(
   weekStart: string,
   todayCR: string,
@@ -106,8 +116,9 @@ function buildWeekRows(
     const isActive = existingSlot
       ? existingSlot.isActive
       : (template?.isActive ?? false);
-    const startTime = existingSlot?.startTime ?? template?.startTime ?? '09:00';
-    const endTime = existingSlot?.endTime ?? template?.endTime ?? '18:00';
+    const startTime = existingSlot?.startTime ?? template?.startTime ?? '06:00';
+    const lastStartTime = existingSlot?.lastStartTime ?? template?.lastStartTime ?? '18:00';
+    const endTime = existingSlot?.endTime ?? template?.endTime ?? '21:00';
 
     return {
       dayOfWeek: meta.dayOfWeek,
@@ -116,6 +127,7 @@ function buildWeekRows(
       date,
       isActive,
       startTime,
+      lastStartTime,
       endTime,
       isPast: date < todayCR,
     };
@@ -215,7 +227,7 @@ function ConfigPage() {
 
   const handleTimeChange = (
     dayOfWeek: number,
-    field: 'startTime' | 'endTime',
+    field: 'startTime' | 'lastStartTime' | 'endTime',
     value: string,
   ) => {
     setWeekRows((prev) =>
@@ -233,10 +245,21 @@ function ConfigPage() {
     setSuccessMsg(null);
     setConflicts([]);
 
-    // Validación rápida de horarios en cliente para días activos editables
+    // Validación en pantalla antes de enviar: primera <= última < cierre
     for (const row of weekRows) {
-      if (row.isActive && !row.isPast && row.endTime <= row.startTime) {
-        setError(`En ${row.label}, la hora de salida debe ser posterior a la hora de entrada.`);
+      if (!row.isActive && !saveAsTemplate) continue;
+      if (row.isPast && !saveAsTemplate) continue;
+
+      if (row.startTime > row.lastStartTime) {
+        setError(
+          `En ${row.label}, la "Primera cita" (${row.startTime}) no puede ser posterior a la "Última cita" (${row.lastStartTime}).`,
+        );
+        return;
+      }
+      if (row.lastStartTime >= row.endTime) {
+        setError(
+          `En ${row.label}, el "Cierre" (${row.endTime}) debe ser posterior a la "Última cita" (${row.lastStartTime}).`,
+        );
         return;
       }
     }
@@ -248,6 +271,7 @@ function ConfigPage() {
         .map((row) => ({
           dayOfWeek: row.dayOfWeek,
           startTime: row.startTime,
+          lastStartTime: row.lastStartTime,
           endTime: row.endTime,
         }));
 
@@ -261,6 +285,7 @@ function ConfigPage() {
           weekRows.map((row) => ({
             dayOfWeek: row.dayOfWeek,
             startTime: row.startTime,
+            lastStartTime: row.lastStartTime,
             endTime: row.endTime,
             isActive: row.isActive,
           })),
@@ -300,6 +325,7 @@ function ConfigPage() {
       isSunday: boolean;
       isOpen: boolean;
       startTime?: string;
+      lastStartTime?: string;
       endTime?: string;
     }> = [];
 
@@ -316,6 +342,7 @@ function ConfigPage() {
         isSunday,
         isOpen,
         startTime: slot?.startTime,
+        lastStartTime: slot?.lastStartTime,
         endTime: slot?.endTime,
       });
     }
@@ -388,7 +415,7 @@ function ConfigPage() {
                     <strong className="text-gold-light">{formatDisplayDate(c.date)}</strong>:{' '}
                     {c.reason === 'has_bookings'
                       ? `No se desactivó porque tiene ${c.bookingsCount} cita(s) pendiente(s) o confirmada(s).`
-                      : `No se acortó el horario porque ${c.bookingsCount} cita(s) quedaría(n) fuera del nuevo horario.`}
+                      : `No se modificó el horario porque ${c.bookingsCount} cita(s) quedaría(n) fuera del nuevo rango (primera cita, última cita o cierre).`}
                   </span>
                 </li>
               ))}
@@ -402,7 +429,7 @@ function ConfigPage() {
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className="h-20 bg-bg-base border border-gold/10 rounded-xl animate-pulse"
+                className="h-24 bg-bg-base border border-gold/10 rounded-xl animate-pulse"
               />
             ))}
           </div>
@@ -413,7 +440,7 @@ function ConfigPage() {
               return (
                 <div
                   key={row.dayOfWeek}
-                  className={`p-4 rounded-xl border transition-colors ${
+                  className={`p-4 rounded-xl border transition-colors space-y-3 ${
                     row.isPast
                       ? 'bg-bg-base/50 border-light/10 opacity-60'
                       : row.isActive
@@ -421,15 +448,15 @@ function ConfigPage() {
                         : 'bg-bg-base/80 border-light/10'
                   }`}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    {/* Toggle del día (min 48px touch target) */}
-                    <button
-                      type="button"
-                      disabled={row.isPast}
-                      onClick={() => handleToggleDay(row.dayOfWeek)}
-                      aria-pressed={row.isActive}
-                      className="min-h-[48px] flex items-center justify-between sm:justify-start gap-3 text-left cursor-pointer disabled:cursor-not-allowed"
-                    >
+                  {/* Toggle del día (min 48px touch target) */}
+                  <button
+                    type="button"
+                    disabled={row.isPast}
+                    onClick={() => handleToggleDay(row.dayOfWeek)}
+                    aria-pressed={row.isActive}
+                    className="w-full min-h-[48px] flex items-center justify-between gap-3 text-left cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    <div className="flex items-center gap-3">
                       <span
                         className={`w-12 h-7 flex items-center rounded-full p-1 transition-colors duration-200 ${
                           row.isActive ? 'bg-gold justify-end' : 'bg-bg-elevated justify-start'
@@ -456,50 +483,70 @@ function ConfigPage() {
                               : 'Cerrado'}
                         </span>
                       </div>
-                    </button>
+                    </div>
+                  </button>
 
-                    {/* Inputs de hora entrada y salida */}
-                    {row.isActive && (
-                      <div className="grid grid-cols-2 gap-3 sm:w-72">
-                        <div className="flex flex-col gap-1">
-                          <label
-                            htmlFor={`start-${row.dayOfWeek}`}
-                            className="text-text-secondary text-xs font-medium"
-                          >
-                            Entrada
-                          </label>
-                          <input
-                            id={`start-${row.dayOfWeek}`}
-                            type="time"
-                            value={row.startTime}
-                            disabled={row.isPast}
-                            onChange={(e) =>
-                              handleTimeChange(row.dayOfWeek, 'startTime', e.target.value)
-                            }
-                            className="w-full h-12 px-3 bg-bg-card border border-gold/20 text-text-primary text-lg rounded-xl focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold disabled:opacity-50"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label
-                            htmlFor={`end-${row.dayOfWeek}`}
-                            className="text-text-secondary text-xs font-medium"
-                          >
-                            Salida
-                          </label>
-                          <input
-                            id={`end-${row.dayOfWeek}`}
-                            type="time"
-                            value={row.endTime}
-                            disabled={row.isPast}
-                            onChange={(e) =>
-                              handleTimeChange(row.dayOfWeek, 'endTime', e.target.value)
-                            }
-                            className="w-full h-12 px-3 bg-bg-card border border-gold/20 text-text-primary text-lg rounded-xl focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold disabled:opacity-50"
-                          />
-                        </div>
+                  {/* 3 Inputs de hora: Primera cita, Última cita, Cierre */}
+                  {row.isActive && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      <div className="flex flex-col gap-1">
+                        <label
+                          htmlFor={`start-${row.dayOfWeek}`}
+                          className="text-text-secondary text-xs font-medium"
+                        >
+                          Primera cita
+                        </label>
+                        <input
+                          id={`start-${row.dayOfWeek}`}
+                          type="time"
+                          value={row.startTime}
+                          disabled={row.isPast}
+                          onChange={(e) =>
+                            handleTimeChange(row.dayOfWeek, 'startTime', e.target.value)
+                          }
+                          className="w-full h-12 px-3 bg-bg-card border border-gold/20 text-text-primary text-lg rounded-xl focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold disabled:opacity-50"
+                        />
                       </div>
-                    )}
-                  </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label
+                          htmlFor={`last-start-${row.dayOfWeek}`}
+                          className="text-text-secondary text-xs font-medium"
+                        >
+                          Última cita
+                        </label>
+                        <input
+                          id={`last-start-${row.dayOfWeek}`}
+                          type="time"
+                          value={row.lastStartTime}
+                          disabled={row.isPast}
+                          onChange={(e) =>
+                            handleTimeChange(row.dayOfWeek, 'lastStartTime', e.target.value)
+                          }
+                          className="w-full h-12 px-3 bg-bg-card border border-gold/20 text-text-primary text-lg rounded-xl focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold disabled:opacity-50"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label
+                          htmlFor={`end-${row.dayOfWeek}`}
+                          className="text-text-secondary text-xs font-medium"
+                        >
+                          Cierre
+                        </label>
+                        <input
+                          id={`end-${row.dayOfWeek}`}
+                          type="time"
+                          value={row.endTime}
+                          disabled={row.isPast}
+                          onChange={(e) =>
+                            handleTimeChange(row.dayOfWeek, 'endTime', e.target.value)
+                          }
+                          className="w-full h-12 px-3 bg-bg-card border border-gold/20 text-text-primary text-lg rounded-xl focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold disabled:opacity-50"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -553,7 +600,7 @@ function ConfigPage() {
             {upcoming14Days.map((day) => (
               <div
                 key={day.date}
-                className="min-h-[48px] py-2.5 flex items-center justify-between gap-2"
+                className="min-h-[48px] py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-text-primary text-base font-medium">
@@ -566,12 +613,12 @@ function ConfigPage() {
                   )}
                 </div>
 
-                {day.isOpen ? (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-success/10 text-success border border-success/30">
-                    Abierto {day.startTime}–{day.endTime}
+                {day.isOpen && day.startTime && day.lastStartTime && day.endTime ? (
+                  <span className="inline-flex items-center self-start sm:self-auto px-3 py-1 rounded-full text-xs font-semibold bg-success/10 text-success border border-success/30">
+                    {`Abierto · citas ${formatTime12h(day.startTime)}–${formatTime12h(day.lastStartTime)} · cierre ${formatTime12h(day.endTime)}`}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-bg-elevated text-text-muted border border-light/10">
+                  <span className="inline-flex items-center self-start sm:self-auto px-3 py-1 rounded-full text-xs font-semibold bg-bg-elevated text-text-muted border border-light/10">
                     Cerrado
                   </span>
                 )}

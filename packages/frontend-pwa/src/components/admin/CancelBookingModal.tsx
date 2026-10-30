@@ -26,8 +26,12 @@ function CancelBookingModal({ bookingId, clientName, onSuccess, onClose }: Cance
     try {
       await cancelBooking(bookingId, reason || undefined);
       onSuccess();
-    } catch {
-      setError('No se pudo cancelar la cita. Intentá de nuevo.');
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo cancelar la cita. Intentá de nuevo.',
+      );
     } finally {
       setIsSubmitting(false);
     }

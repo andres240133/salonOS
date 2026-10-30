@@ -1,3 +1,14 @@
+export class BookingValidationError extends Error {
+  readonly statusCode = 400;
+  readonly field?: string;
+
+  constructor(message: string, field?: string) {
+    super(message);
+    this.name = 'BookingValidationError';
+    this.field = field;
+  }
+}
+
 export class SlotUnavailableError extends Error {
   readonly statusCode = 409;
 

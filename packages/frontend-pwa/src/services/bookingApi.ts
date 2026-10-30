@@ -2,8 +2,9 @@ import type { Service, Slot } from '../store/bookingStore';
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
+// TODO: documentar VITE_API_URL para Railway.
 const BASE_URL: string =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
+  (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 
 // ── Custom Errors ─────────────────────────────────────────────────────────────
 
@@ -82,7 +83,7 @@ export async function fetchAvailability(
     to,
   });
 
-  const response = await fetch(`${BASE_URL}/api/availability?${params.toString()}`);
+  const response = await fetch(`${BASE_URL}/api/bookings/availability/range?${params.toString()}`);
 
   if (!response.ok) {
     throw new ApiError(response.status, 'Failed to fetch availability.');
@@ -92,22 +93,58 @@ export async function fetchAvailability(
   return data.slots;
 }
 
-/** Creates a new booking. Throws {@link SlotTakenError} on 409, {@link ApiError} on 5xx. */
+/** Creates a new booking. Throws {@link SlotTakenError} on 409, {@link ValidationError} on 400, {@link ApiError} on 5xx. */
 export async function createBooking(payload: CreateBookingPayload): Promise<BookingResult> {
+  // Extraer fecha ('YYYY-MM-DD') y hora ('HH:MM') por string sin usar new Date()
+  const [date, timePart = ''] = payload.scheduledAt.split('T');
+  const startTime = timePart.slice(0, 5);
+
   const response = await fetch(`${BASE_URL}/api/bookings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      serviceId: payload.serviceId,
+      date,
+      startTime,
+      clientName: payload.clientName,
+      clientPhone: payload.clientPhone,
+      notes: payload.notes,
+    }),
   });
 
   if (response.status === 201) {
-    const data: BookingResult = await response.json();
-    return data;
+    const data: {
+      booking: { id: string; scheduledAt: string };
+      confirmation: { serviceName: string };
+    } = await response.json();
+
+    return {
+      bookingId: data.booking.id,
+      scheduledAt: data.booking.scheduledAt,
+      serviceName: data.confirmation.serviceName,
+    };
   }
 
   if (response.status === 409) {
     const body: { availableSlots: Slot[] } = await response.json();
     throw new SlotTakenError(body.availableSlots);
+  }
+
+  if (response.status === 400) {
+    const body: {
+      error?: string;
+      details?: Record<string, string[] | undefined>;
+    } = await response.json();
+
+    const entries = Object.entries(body.details ?? {});
+    const firstEntry = entries.find(([, msgs]) => msgs && msgs.length > 0);
+    const field = firstEntry ? firstEntry[0] : 'form';
+    const message =
+      firstEntry && firstEntry[1]
+        ? firstEntry[1][0]
+        : (body.error ?? 'Datos inválidos.');
+
+    throw new ValidationError(field, message);
   }
 
   if (response.status === 422) {

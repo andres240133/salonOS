@@ -9,6 +9,7 @@ import {
   type BookingStatus,
 } from '../models/booking.js';
 import {
+  BookingValidationError,
   SlotUnavailableError,
   ServiceNotFoundError,
   BookingNotFoundError,
@@ -18,6 +19,7 @@ import { pool } from '../config/database.js';
 import { WhatsAppService } from '../services/whatsapp.js';
 
 const TIMEZONE = 'America/Costa_Rica';
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 // ── Validation ──────────────────────────────────────────────
 
@@ -26,7 +28,8 @@ const createBookingSchema = z.object({
   date:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
   startTime:   z.string().regex(/^\d{2}:\d{2}$/, 'Formato de hora inválido (HH:MM)'),
   clientName:  z.string().min(2, 'Nombre muy corto').max(100),
-  clientPhone: z.string().min(8, 'Teléfono muy corto').max(20),
+  clientPhone: z.string().min(1, 'Teléfono requerido').max(30),
+  notes:       z.string().max(500, 'Las notas no pueden superar 500 caracteres').optional(),
 });
 
 const updateStatusSchema = z.object({
@@ -38,6 +41,32 @@ const updateStatusSchema = z.object({
 function decryptField(stored: string): string {
   const [encrypted, iv] = stored.split(':');
   return decrypt(encrypted, iv);
+}
+
+/**
+ * Valida que una cadena YYYY-MM-DD represente una fecha calendario real
+ * usando aritmética UTC al mediodía para evitar desfases de huso horario.
+ */
+function isValidDateString(dateStr: string): boolean {
+  if (!DATE_REGEX.test(dateStr)) return false;
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === dateStr;
+}
+
+/**
+ * Suma días a una fecha YYYY-MM-DD en UTC puro (sin depender del TZ del servidor).
+ */
+function addDaysUTC(dateStr: string, daysToAdd: number): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + daysToAdd);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Obtiene la fecha actual YYYY-MM-DD en America/Costa_Rica (UTC-6).
+ */
+function getTodayCR(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
 }
 
 /** Dispara asíncronamente el envío del recordatorio de confirmación por WhatsApp */
@@ -69,8 +98,38 @@ export async function create(req: Request, res: Response): Promise<void> {
     // Fire-and-forget: no bloquea la respuesta al cliente
     notifyWhatsApp(result.booking.id);
   } catch (err) {
+    if (err instanceof BookingValidationError) {
+      res.status(400).json({
+        error: err.message,
+        ...(err.field ? { details: { [err.field]: [err.message] } } : {}),
+      });
+      return;
+    }
     if (err instanceof SlotUnavailableError) {
-      res.status(409).json({ error: err.message });
+      try {
+        const isSunday = new Date(`${parsed.data.date}T12:00:00Z`).getUTCDay() === 0;
+        const rawSlots = isSunday
+          ? []
+          : await getAvailableSlots(parsed.data.date, parsed.data.serviceId);
+        const availableSlots = rawSlots
+          .filter((s) => s.spotsLeft > 0)
+          .map((s) => ({
+            date: parsed.data.date,
+            time: s.startTime,
+            spotsLeft: s.spotsLeft,
+          }));
+
+        res.status(409).json({
+          error: err.message,
+          availableSlots,
+        });
+      } catch (slotErr) {
+        console.error('[booking] Error al consultar alternativas tras 409:', slotErr);
+        res.status(409).json({
+          error: err.message,
+          availableSlots: [],
+        });
+      }
       return;
     }
     if (err instanceof ServiceNotFoundError) {
@@ -78,6 +137,74 @@ export async function create(req: Request, res: Response): Promise<void> {
       return;
     }
     console.error('[booking] Error al crear reserva:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+/**
+ * GET /api/bookings/availability/range — Consulta slots disponibles en un rango de hasta 14 días (público).
+ * Si `from` es anterior a mañana (hora CR), se ajusta a mañana para tolerar cruces de medianoche.
+ */
+export async function getAvailabilityRange(req: Request, res: Response): Promise<void> {
+  const { serviceId, from: rawFrom, to: rawTo } = req.query;
+
+  if (!serviceId || typeof rawFrom !== 'string' || typeof rawTo !== 'string') {
+    res.status(400).json({ error: 'Parámetros serviceId, from y to son requeridos' });
+    return;
+  }
+
+  const parsedServiceId = parseInt(serviceId as string, 10);
+  if (Number.isNaN(parsedServiceId) || parsedServiceId <= 0) {
+    res.status(400).json({ error: 'serviceId debe ser un número entero positivo' });
+    return;
+  }
+
+  if (!isValidDateString(rawFrom) || !isValidDateString(rawTo)) {
+    res.status(400).json({ error: 'Formato de fecha inválido (YYYY-MM-DD)' });
+    return;
+  }
+
+  if (rawTo < rawFrom) {
+    res.status(400).json({ error: 'La fecha final (to) debe ser mayor o igual a la fecha inicial (from)' });
+    return;
+  }
+
+  // Máximo 14 días inclusive desde el from solicitado (from + 13 días = 14 fechas)
+  const maxAllowedTo = addDaysUTC(rawFrom, 13);
+  if (rawTo > maxAllowedTo) {
+    res.status(400).json({ error: 'El rango máximo permitido es de 14 días' });
+    return;
+  }
+
+  const tomorrowCR = addDaysUTC(getTodayCR(), 1);
+  const effectiveFrom = rawFrom < tomorrowCR ? tomorrowCR : rawFrom;
+
+  if (rawTo < effectiveFrom) {
+    res.status(400).json({ error: 'El rango solicitado debe ser a partir de mañana' });
+    return;
+  }
+
+  try {
+    const slots: Array<{ date: string; time: string; spotsLeft: number }> = [];
+
+    for (let curr = effectiveFrom; curr <= rawTo; curr = addDaysUTC(curr, 1)) {
+      const dayOfWeek = new Date(`${curr}T12:00:00Z`).getUTCDay();
+      if (dayOfWeek === 0) continue;
+
+      const daySlots = await getAvailableSlots(curr, parsedServiceId);
+      for (const s of daySlots) {
+        if (s.spotsLeft <= 0) continue;
+        slots.push({
+          date: curr,
+          time: s.startTime,
+          spotsLeft: s.spotsLeft,
+        });
+      }
+    }
+
+    res.json({ slots });
+  } catch (err) {
+    console.error('[booking] Error al obtener rango de disponibilidad:', err);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
@@ -107,7 +234,10 @@ export async function getAvailability(req: Request, res: Response): Promise<void
   }
 }
 
-/** GET /api/bookings — Lista citas con datos desencriptados (admin, requireAuth) */
+/**
+ * GET /api/bookings — Lista citas con datos desencriptados (admin, requireAuth)
+ * @deprecated Usar GET /api/admin/bookings/today en su lugar.
+ */
 export async function list(req: Request, res: Response): Promise<void> {
   const dateParam = (req.query.date as string) ??
     new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
@@ -131,7 +261,10 @@ export async function list(req: Request, res: Response): Promise<void> {
   }
 }
 
-/** PATCH /api/bookings/:id/status — Actualiza estado de cita (admin, requireAuth) */
+/**
+ * PATCH /api/bookings/:id/status — Actualiza estado de cita (admin, requireAuth)
+ * @deprecated Usar PATCH /api/admin/bookings/:id/complete o PATCH /api/admin/bookings/:id/cancel en su lugar.
+ */
 export async function updateStatus(req: Request, res: Response): Promise<void> {
   const { id } = req.params;
 
