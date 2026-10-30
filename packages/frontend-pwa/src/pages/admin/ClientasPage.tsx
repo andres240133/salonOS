@@ -55,15 +55,24 @@ function ClientasPage() {
   }, [loadClients]);
 
   // Real-time filtering: normalize both the query and each client's name/phone
-  // to strip diacritics and ignore case, ensuring resilient mobile search UX.
+  // to strip diacritics and ignore case, and strip non-digits when matching phone numbers
+  // so queries like "8888-8888" match E.164 phones like "+50688888888".
   const filteredClients = useMemo(() => {
     if (!searchQuery.trim()) return clients;
 
     const normalizedQuery = normalizeForSearch(searchQuery);
+    const queryDigits = searchQuery.replace(/\D/g, '');
+
     return clients.filter((c) => {
       const normalizedName = normalizeForSearch(c.name);
-      const normalizedPhone = normalizeForSearch(c.phone);
-      return normalizedName.includes(normalizedQuery) || normalizedPhone.includes(normalizedQuery);
+      if (normalizedName.includes(normalizedQuery)) return true;
+
+      if (queryDigits.length > 0) {
+        const phoneDigits = c.phone.replace(/\D/g, '');
+        if (phoneDigits.includes(queryDigits)) return true;
+      }
+
+      return normalizeForSearch(c.phone).includes(normalizedQuery);
     });
   }, [clients, searchQuery]);
 

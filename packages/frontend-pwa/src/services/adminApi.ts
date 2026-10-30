@@ -278,6 +278,7 @@ export interface AdminClient {
 export interface ClientHistoryItem {
   id: string;
   date: string;
+  status?: 'pending' | 'confirmed' | 'completed';
   serviceName: string;
   notes: string | null;
   technicalFormula: string | null;
@@ -288,7 +289,7 @@ export interface ClientHistoryItem {
 /** Fetches the full client roster with decrypted PII. */
 export async function fetchAdminClients(): Promise<AdminClient[]> {
   const res = await authFetch('/api/admin/clients');
-  if (!res.ok) throw new Error(`Failed to fetch clients: ${res.status}`);
+  if (!res.ok) throw await extractApiError(res, 'No se pudieron cargar las clientas');
   const data: { clients: AdminClient[] } = await res.json();
   return data.clients;
 }
@@ -296,7 +297,7 @@ export async function fetchAdminClients(): Promise<AdminClient[]> {
 /** Fetches the service history for a specific client, including technical color formulas. */
 export async function fetchClientHistory(clientId: number): Promise<ClientHistoryItem[]> {
   const res = await authFetch(`/api/admin/clients/${clientId}/history`);
-  if (!res.ok) throw new Error(`Failed to fetch client history: ${res.status}`);
+  if (!res.ok) throw await extractApiError(res, 'No se pudo cargar el historial');
   const data: { history: ClientHistoryItem[] } = await res.json();
   return data.history;
 }
@@ -312,7 +313,7 @@ export async function updateTechnicalFormula(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ bookingId, formula }),
   });
-  if (!res.ok) throw new Error(`Failed to save formula: ${res.status}`);
+  if (!res.ok) throw await extractApiError(res, 'No se pudo guardar la fórmula');
 }
 
 // ── Availability Module Types ─────────────────────────────────────────────────

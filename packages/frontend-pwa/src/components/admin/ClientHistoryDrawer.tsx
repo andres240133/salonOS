@@ -36,8 +36,12 @@ function ClientHistoryDrawer({ client, onClose }: ClientHistoryDrawerProps) {
     try {
       const data = await fetchClientHistory(client.id);
       setHistory(data);
-    } catch {
-      setError('No se pudo cargar el historial.');
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo cargar el historial.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -48,26 +52,32 @@ function ClientHistoryDrawer({ client, onClose }: ClientHistoryDrawerProps) {
   }, [loadHistory]);
 
   const handleSaveFormula = async (bookingId: string) => {
-    if (!formulaText.trim()) return;
+    const trimmed = formulaText.trim();
+    if (!trimmed) return;
 
     setIsSavingFormula(true);
+    setError(null);
     try {
-      await updateTechnicalFormula(client.id, bookingId, formulaText.trim());
+      await updateTechnicalFormula(client.id, bookingId, trimmed);
 
       // Reactive local cache invalidation: update the specific item in-place
       // so the formula appears immediately without re-fetching the full history.
       setHistory((prev) =>
         prev.map((item) =>
           item.id === bookingId
-            ? { ...item, technicalFormula: formulaText.trim() }
+            ? { ...item, technicalFormula: trimmed }
             : item,
         ),
       );
 
       setEditingFormulaId(null);
       setFormulaText('');
-    } catch {
-      setError('No se pudo guardar la fórmula.');
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo guardar la fórmula.',
+      );
     } finally {
       setIsSavingFormula(false);
     }
@@ -140,107 +150,128 @@ function ClientHistoryDrawer({ client, onClose }: ClientHistoryDrawerProps) {
         ) : (
           /* History list */
           <div className="space-y-4">
-            {sortedHistory.map((item) => (
-              <div
-                key={item.id}
-                className="p-4 bg-bg-elevated/40 border border-gold/10 rounded-xl space-y-2"
-              >
-                {/* Visit header */}
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-text-primary font-semibold text-sm">
-                      {item.serviceName}
-                    </p>
-                    <p className="text-text-muted text-xs mt-0.5">
-                      {formatDate(item.date)}
-                    </p>
-                  </div>
-                </div>
+            {sortedHistory.map((item) => {
+              const isCompleted = !item.status || item.status === 'completed';
 
-                {/* Notes */}
-                {item.notes && (
-                  <p className="text-text-secondary text-sm">
-                    📝 {item.notes}
-                  </p>
-                )}
-
-                {/* Technical Formula Block */}
-                <div className="p-3 bg-bg-elevated rounded-lg">
-                  {item.technicalFormula ? (
-                    /* Saved formula display */
+              return (
+                <div
+                  key={item.id}
+                  className="p-4 bg-bg-elevated/40 border border-gold/10 rounded-xl space-y-2"
+                >
+                  {/* Visit header */}
+                  <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-text-muted text-xs font-semibold uppercase tracking-wider mb-1">
-                        Fórmula de Color
+                      <p className="text-text-primary font-semibold text-sm">
+                        {item.serviceName}
                       </p>
-                      <p className="text-gold-light text-sm italic">
-                        🎨 {item.technicalFormula}
+                      <p className="text-text-muted text-xs mt-0.5">
+                        {formatDate(item.date)}
                       </p>
                     </div>
-                  ) : editingFormulaId === item.id ? (
-                    /* Formula edit mode */
-                    <div className="space-y-2">
-                      <label
-                        htmlFor={`formula-${item.id}`}
-                        className="text-text-muted text-xs font-semibold uppercase tracking-wider"
-                      >
-                        Fórmula de Color
-                      </label>
-                      <textarea
-                        id={`formula-${item.id}`}
-                        rows={2}
-                        value={formulaText}
-                        onChange={(e) => setFormulaText(e.target.value)}
-                        placeholder="Ej: Tinte 6.1 + 20 vol + matizador azul"
-                        className="w-full px-3 py-2 text-sm bg-bg-card border border-gold/20 rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 resize-none transition-colors"
-                        autoFocus
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleSaveFormula(item.id)}
-                          disabled={isSavingFormula || !formulaText.trim()}
-                          className="h-9 px-4 bg-gold hover:bg-gold-hover text-bg-base text-xs font-bold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
-                        >
-                          {isSavingFormula ? (
-                            <>
-                              <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                              Guardando...
-                            </>
-                          ) : (
-                            'Guardar Mezcla'
-                          )}
-                        </button>
+                  </div>
+
+                  {/* Notes */}
+                  {item.notes && (
+                    <p className="text-text-secondary text-sm">
+                      📝 {item.notes}
+                    </p>
+                  )}
+
+                  {/* Technical Formula Block (only for completed bookings or if formula already exists) */}
+                  {(isCompleted || item.technicalFormula) && (
+                    <div className="p-3 bg-bg-elevated rounded-lg">
+                      {editingFormulaId === item.id ? (
+                        /* Formula create/edit mode */
+                        <div className="space-y-2">
+                          <label
+                            htmlFor={`formula-${item.id}`}
+                            className="text-text-muted text-xs font-semibold uppercase tracking-wider"
+                          >
+                            Fórmula de Color
+                          </label>
+                          <textarea
+                            id={`formula-${item.id}`}
+                            rows={2}
+                            maxLength={1000}
+                            value={formulaText}
+                            onChange={(e) => setFormulaText(e.target.value)}
+                            placeholder="Ej: Tinte 6.1 + 20 vol + matizador azul"
+                            className="w-full max-h-32 overflow-y-auto px-3 py-2 text-sm bg-bg-card border border-gold/20 rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 resize-none transition-colors"
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSaveFormula(item.id)}
+                              disabled={isSavingFormula || !formulaText.trim()}
+                              className="h-9 px-4 bg-gold hover:bg-gold-hover text-bg-base text-xs font-bold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+                            >
+                              {isSavingFormula ? (
+                                <>
+                                  <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                  </svg>
+                                  Guardando...
+                                </>
+                              ) : (
+                                'Guardar Mezcla'
+                              )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingFormulaId(null);
+                                setFormulaText('');
+                              }}
+                              className="h-9 px-3 text-text-muted text-xs hover:text-text-secondary transition-colors cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : item.technicalFormula ? (
+                        /* Saved formula display + Edit button */
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <p className="text-text-muted text-xs font-semibold uppercase tracking-wider">
+                              Fórmula de Color
+                            </p>
+                            {isCompleted && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingFormulaId(item.id);
+                                  setFormulaText(item.technicalFormula ?? '');
+                                }}
+                                className="text-gold text-xs font-semibold hover:text-gold-light transition-colors cursor-pointer"
+                              >
+                                Editar
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-gold-light text-sm italic">
+                            🎨 {item.technicalFormula}
+                          </p>
+                        </div>
+                      ) : (
+                        /* Add formula button (only for completed bookings) */
                         <button
                           onClick={() => {
-                            setEditingFormulaId(null);
+                            setEditingFormulaId(item.id);
                             setFormulaText('');
                           }}
-                          className="h-9 px-3 text-text-muted text-xs hover:text-text-secondary transition-colors cursor-pointer"
+                          className="text-gold text-xs font-semibold hover:text-gold-light transition-colors cursor-pointer flex items-center gap-1.5"
                         >
-                          Cancelar
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                          </svg>
+                          Agregar Fórmula de Color
                         </button>
-                      </div>
+                      )}
                     </div>
-                  ) : (
-                    /* Add formula button */
-                    <button
-                      onClick={() => {
-                        setEditingFormulaId(item.id);
-                        setFormulaText('');
-                      }}
-                      className="text-gold text-xs font-semibold hover:text-gold-light transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                      </svg>
-                      Agregar Fórmula de Color
-                    </button>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

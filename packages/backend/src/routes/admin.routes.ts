@@ -12,6 +12,11 @@ import {
   cancelAdminBooking,
   createAdminBooking,
 } from '../controllers/adminBooking.controller.js';
+import {
+  listAdminClients,
+  getClientHistory,
+  saveClientFormula,
+} from '../controllers/adminClient.controller.js';
 
 const router = Router();
 
@@ -26,5 +31,9 @@ router.get('/bookings/today', listDayBookings);
 router.post('/bookings', createAdminBooking);
 router.patch('/bookings/:id/complete', completeAdminBooking);
 router.patch('/bookings/:id/cancel', cancelAdminBooking);
+
+router.get('/clients', listAdminClients);
+router.get('/clients/:id/history', getClientHistory);
+router.post('/clients/:id/formulas', saveClientFormula);
 
 export default router;

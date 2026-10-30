@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { withTransaction } from '../config/database.js';
 import { findBookingsByDate } from '../models/booking.js';
 import { createBooking as createBookingSvc } from '../services/booking.js';
-import { decrypt } from '../services/crypto.js';
+import { safeDecryptField } from '../services/pii.js';
 import {
   BookingValidationError,
   SlotUnavailableError,
@@ -54,24 +54,6 @@ function isValidDateString(dateStr: string): boolean {
   if (!DATE_REGEX.test(dateStr)) return false;
   const d = new Date(`${dateStr}T12:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === dateStr;
-}
-
-/**
- * Descifra un campo en formato "encrypted:iv". Si falla la autenticación GCM
- * o el formato es inválido, registra únicamente el ID de la cita (nunca PII)
- * y retorna "(dato ilegible)" para no interrumpir la carga de la agenda.
- */
-function safeDecryptField(stored: string, bookingId: string): string {
-  try {
-    const parts = stored.split(':');
-    if (parts.length !== 2 || !parts[0] || !parts[1]) {
-      throw new Error('Formato de payload cifrado inválido');
-    }
-    return decrypt(parts[0], parts[1]);
-  } catch {
-    console.error(`[adminBooking] Fallo al descifrar PII en reserva id=${bookingId}`);
-    return '(dato ilegible)';
-  }
 }
 
 /**

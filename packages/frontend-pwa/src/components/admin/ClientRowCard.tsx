@@ -42,7 +42,7 @@ function ClientRowCard({ client, onViewHistory }: ClientRowCardProps) {
       {/* Action button */}
       <button
         onClick={() => onViewHistory(client)}
-        className="h-11 px-4 border border-gold/30 text-gold text-sm font-semibold rounded-xl hover:bg-gold/5 transition-all duration-200 active:scale-[0.97] cursor-pointer flex-shrink-0 min-w-[48px]"
+        className="h-12 px-4 border border-gold/30 text-gold text-sm font-semibold rounded-xl hover:bg-gold/5 transition-all duration-200 active:scale-[0.97] cursor-pointer flex-shrink-0 min-w-[48px]"
         aria-label={`Ver ficha técnica de ${client.name}`}
       >
         Ver Ficha
