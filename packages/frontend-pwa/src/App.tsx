@@ -6,6 +6,7 @@ import AgendaPage from './pages/admin/AgendaPage';
 import ProtectedRoute from './components/admin/ProtectedRoute';
 import { FinanceDashboard } from './pages/admin/FinanceDashboard';
 import ClientasPage from './pages/admin/ClientasPage';
+import ConfigPage from './pages/admin/ConfigPage';
 
 function ComingSoon({ label }: { label: string }) {
   return (
@@ -31,7 +32,7 @@ function App() {
           <Route path="finanzas" element={<FinanceDashboard />} />
           <Route path="clientas" element={<ClientasPage />} />
           <Route path="inventario" element={<ComingSoon label="Inventario" />} />
-          <Route path="config" element={<ComingSoon label="Configuración" />} />
+          <Route path="config" element={<ConfigPage />} />
         </Route>
       </Route>
 

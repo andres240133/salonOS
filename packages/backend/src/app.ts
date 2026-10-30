@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { testDatabaseConnection } from './config/database.js';
 import authRoutes from './routes/auth.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 import bookingRoutes from './routes/booking.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import servicesRoutes from './routes/services.routes.js';
@@ -59,6 +60,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/services', servicesRoutes);
