@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { useAuthStore } from '../store/authStore';
+import { authFetch } from '../services/adminApi';
 
 export interface WeeklyFinancialBreakdown {
   week_start: string;
@@ -82,22 +82,8 @@ export const useDashboardStore = create<DashboardState>((set) => ({
         params.append('endDate', endDate);
       }
 
-      // Obtiene el token JWT desde el estado en memoria del authStore de Zustand.
-      // Se usa useAuthStore.getState() (acceso fuera de React) en vez de localStorage
-      // directo para no depender de la forma de serialización del middleware persist
-      // (que guarda todo bajo la key 'salonos-auth' como JSON anidado).
-      // Este patrón es consistente con authFetch() en adminApi.ts.
-      const token = useAuthStore.getState().accessToken ?? '';
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`/api/dashboard/finance?${params.toString()}`, {
+      const response = await authFetch(`/api/dashboard/finance?${params.toString()}`, {
         method: 'GET',
-        headers,
       });
 
       if (!response.ok) {

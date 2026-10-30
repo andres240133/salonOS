@@ -34,7 +34,7 @@ export function FinanceDashboard(): React.JSX.Element {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<'supplies' | 'rent' | 'utilities' | 'marketing' | 'other'>('supplies');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }));
   const [isSavingExpense, setIsSavingExpense] = useState(false);
   const [expenseFormError, setExpenseFormError] = useState<string | null>(null);
   const [expenseFormSuccess, setExpenseFormSuccess] = useState(false);
@@ -44,7 +44,7 @@ export function FinanceDashboard(): React.JSX.Element {
   const [incomeDescription, setIncomeDescription] = useState('');
   const [incomeAmount, setIncomeAmount] = useState('');
   const [incomeCategory, setIncomeCategory] = useState<'product_sale' | 'walk_in_service' | 'other'>('product_sale');
-  const [incomeDate, setIncomeDate] = useState(new Date().toISOString().split('T')[0]);
+  const [incomeDate, setIncomeDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }));
   const [isSavingIncome, setIsSavingIncome] = useState(false);
   const [incomeFormError, setIncomeFormError] = useState<string | null>(null);
   const [incomeFormSuccess, setIncomeFormSuccess] = useState(false);
@@ -73,6 +73,7 @@ export function FinanceDashboard(): React.JSX.Element {
       setDescription('');
       setAmount('');
       setCategory('supplies');
+      setDate(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }));
 
       // INVALIDACIÓN DE CACHÉ INTERACTIVA:
       // Invocamos inmediatamente fetchFinanceMetrics después del éxito de la mutación
@@ -105,6 +106,7 @@ export function FinanceDashboard(): React.JSX.Element {
       setIncomeDescription('');
       setIncomeAmount('');
       setIncomeCategory('product_sale');
+      setIncomeDate(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }));
 
       // INVALIDACIÓN DE CACHÉ INTERACTIVA:
       // Invocamos inmediatamente fetchFinanceMetrics después del éxito de la mutación
@@ -474,6 +476,7 @@ export function FinanceDashboard(): React.JSX.Element {
                   type="number"
                   required
                   min="1"
+                  max="99999999"
                   placeholder="Ej: 15000"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
@@ -583,6 +586,7 @@ export function FinanceDashboard(): React.JSX.Element {
                   type="number"
                   required
                   min="1"
+                  max="99999999"
                   placeholder="Ej: 8000"
                   value={incomeAmount}
                   onChange={(e) => setIncomeAmount(e.target.value)}

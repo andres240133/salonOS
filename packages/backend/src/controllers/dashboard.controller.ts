@@ -136,7 +136,7 @@ export async function getFinanceMetrics(req: Request, res: Response): Promise<vo
 
 const createExpenseSchema = z.object({
   description: z.string().min(2, 'Descripción muy corta').max(255),
-  amount: z.number().positive('El monto debe ser un número positivo'),
+  amount: z.number().positive('El monto debe ser un número positivo').max(99999999.99, 'Monto demasiado alto'),
   category: z.enum(['supplies', 'rent', 'utilities', 'marketing', 'other']),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
 });
@@ -182,7 +182,7 @@ export async function createExpense(req: Request, res: Response): Promise<void> 
 // ── Esquema Zod para la creación de ingresos manuales ──────────────────
 const createManualIncomeSchema = z.object({
   description: z.string().min(2, 'Descripción muy corta').max(255),
-  amount: z.number().positive('El monto debe ser un número positivo'),
+  amount: z.number().positive('El monto debe ser un número positivo').max(99999999.99, 'Monto demasiado alto'),
   category: z.enum(['product_sale', 'walk_in_service', 'other']),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)'),
 });

@@ -223,7 +223,14 @@ export async function createExpense(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ amount, description, date, category }),
   });
-  if (!res.ok) throw new Error(`Failed to create expense: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detailsMsg =
+      body.details && typeof body.details === 'object'
+        ? Object.values(body.details as Record<string, string[]>).flat().join(', ')
+        : '';
+    throw new Error(detailsMsg || body.error || `Error ${res.status}`);
+  }
 }
 
 /** Registers a new manual income entry (product sales, walk-in services, etc.). */
@@ -238,7 +245,14 @@ export async function createManualIncome(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ amount, description, date, category }),
   });
-  if (!res.ok) throw new Error(`Failed to create income: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detailsMsg =
+      body.details && typeof body.details === 'object'
+        ? Object.values(body.details as Record<string, string[]>).flat().join(', ')
+        : '';
+    throw new Error(detailsMsg || body.error || `Error ${res.status}`);
+  }
 }
 
 // ── Client Module Types ───────────────────────────────────────────────────────
@@ -288,4 +302,107 @@ export async function updateTechnicalFormula(
     body: JSON.stringify({ bookingId, formula }),
   });
   if (!res.ok) throw new Error(`Failed to save formula: ${res.status}`);
+}
+
+// ── Availability Module Types ─────────────────────────────────────────────────
+
+export interface AvailabilityDay {
+  date: string;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+}
+
+export interface AvailabilityTemplate {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+}
+
+export interface WeekDayInput {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+export interface AvailabilityConflict {
+  date: string;
+  bookingsCount: number;
+  reason: 'has_bookings' | 'outside_hours';
+}
+
+export interface SaveWeekResponse {
+  weekStart: string;
+  conflicts: AvailabilityConflict[];
+}
+
+// ── Availability Module API Functions ─────────────────────────────────────────
+
+/** Fetches configured availability slots for a date range (YYYY-MM-DD). */
+export async function fetchAdminAvailability(
+  from: string,
+  to: string,
+): Promise<AvailabilityDay[]> {
+  const params = new URLSearchParams({ from, to });
+  const res = await authFetch(`/api/admin/availability?${params.toString()}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Error ${res.status}`);
+  }
+  const data: { days: AvailabilityDay[] } = await res.json();
+  return data.days;
+}
+
+/** Saves the weekly availability schedule (Monday–Saturday) and returns any booking conflicts. */
+export async function saveWeekAvailability(payload: {
+  weekStart: string;
+  days: WeekDayInput[];
+}): Promise<SaveWeekResponse> {
+  const res = await authFetch('/api/admin/availability/week', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detailsMsg =
+      body.details && typeof body.details === 'object'
+        ? Object.values(body.details as Record<string, string[]>).flat().join(', ')
+        : '';
+    throw new Error(detailsMsg || body.error || `Error ${res.status}`);
+  }
+  return res.json() as Promise<SaveWeekResponse>;
+}
+
+/** Fetches the saved "semana típica" templates (Monday–Saturday). */
+export async function fetchAvailabilityTemplates(): Promise<AvailabilityTemplate[]> {
+  const res = await authFetch('/api/admin/availability/templates');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Error ${res.status}`);
+  }
+  const data: { templates: AvailabilityTemplate[] } = await res.json();
+  return data.templates;
+}
+
+/** Updates the "semana típica" templates (Monday–Saturday). */
+export async function updateAvailabilityTemplates(
+  templates: AvailabilityTemplate[],
+): Promise<AvailabilityTemplate[]> {
+  const res = await authFetch('/api/admin/availability/templates', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ templates }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detailsMsg =
+      body.details && typeof body.details === 'object'
+        ? Object.values(body.details as Record<string, string[]>).flat().join(', ')
+        : '';
+    throw new Error(detailsMsg || body.error || `Error ${res.status}`);
+  }
+  const data: { templates: AvailabilityTemplate[] } = await res.json();
+  return data.templates;
 }
