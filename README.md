@@ -35,17 +35,20 @@ npm install
 cp .env.example .env
 # Editar .env con los valores reales (ver sección Variables de Entorno)
 
-# 4. Ejecutar la migración inicial de la base de datos
-# Ejecutar todas las migraciones en orden
+# 4. Ejecutar las migraciones de la base de datos en orden exacto (001, 001b, 002 ... 009)
 cd packages/backend/src/database/migrations
 
 # IMPORTANTE: usar docker cp en vez de pipe de PowerShell para preservar UTF-8
-docker cp 001_initial_schema.sql salonos-postgres:/tmp/ && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/001_initial_schema.sql
-docker cp 002_availability_model.sql salonos-postgres:/tmp/ && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/002_availability_model.sql
-docker cp 003_refresh_tokens.sql salonos-postgres:/tmp/ && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/003_refresh_tokens.sql
-docker cp 004_recordatorio_log.sql salonos-postgres:/tmp/ && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/004_recordatorio_log.sql
-docker cp 005_services_seed.sql salonos-postgres:/tmp/ && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/005_services_seed.sql
-docker cp 006_manual_income.sql salonos-postgres:/tmp/ && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/006_manual_income.sql
+docker cp 001_initial_schema.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
+docker cp 001b_fix_encoding.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
+docker cp 002_availability_model.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
+docker cp 003_refresh_tokens.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
+docker cp 004_recordatorio_log.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
+docker cp 005_services_seed.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
+docker cp 006_manual_income.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
+docker cp 007_last_start_time.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
+docker cp 008_booking_cancellation.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
+docker cp 009_technical_formula.sql salonos-postgres:/tmp/m.sql && docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
 
 # 5. Levantar todos los servicios en modo desarrollo
 npm run dev
@@ -83,13 +86,29 @@ Copiar `.env.example` a `.env` y completar:
 
 ## Base de Datos
 
-Ejecutar la migración inicial para crear todas las tablas:
+Las migraciones ubicadas en `packages/backend/src/database/migrations/` deben aplicarse en este **orden exacto** (`001`, `001b`, `002` ... `009`):
 
-```bash
-psql $DATABASE_URL -f packages/backend/src/database/migrations/001_initial_schema.sql
+1. `001_initial_schema.sql` — Esquema inicial completo (tablas, índices, constraints y comentarios).
+2. `001b_fix_encoding.sql` — Corrección de codificación UTF-8 en comentarios de tablas y columnas.
+3. `002_availability_model.sql` — Tablas `availability_slots` y `availability_templates`.
+4. `003_refresh_tokens.sql` — Tabla `refresh_tokens` para rotación y revocación de sesiones.
+5. `004_recordatorio_log.sql` — Tabla `recordatorio_log` y columnas de confirmación WhatsApp.
+6. `005_services_seed.sql` — Catálogo inicial de servicios del salón.
+7. `006_manual_income.sql` — Tabla `manual_income` para ingresos directos.
+8. `007_last_start_time.sql` — Columna `last_start_time` en disponibilidad y plantillas.
+9. `008_booking_cancellation.sql` — Columna `cancellation_reason` en `bookings`.
+10. `009_technical_formula.sql` — Columnas `technical_formula` y `technical_formula_updated_at` en `bookings`.
+
+### Cómo aplicar una migración con Docker en Windows
+
+Copiar cada archivo dentro del contenedor y ejecutarlo con `psql -f`:
+
+```powershell
+docker cp <archivo>.sql salonos-postgres:/tmp/m.sql
+docker exec -i salonos-postgres psql -U postgres -d salonos_db -f /tmp/m.sql
 ```
 
-Esto crea el esquema completo con todas las tablas, índices, constraints y comentarios SQL.
+> ⚠️ **Advertencia de codificación en Windows:** **NO** usar `Get-Content archivo.sql | docker exec ...` en PowerShell, ya que el pipe convierte la salida a la codificación por defecto de la consola y corrompe los acentos (`á`, `é`, `í`, `ó`, `ú`, `ñ`) en UTF-8.
 
 ## Despliegue en Railway
 

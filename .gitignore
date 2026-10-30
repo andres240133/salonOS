@@ -42,3 +42,4 @@ coverage/
 .railway/
 
 create_admin_user.sql
+/*.png

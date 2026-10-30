@@ -81,7 +81,11 @@ jobs:
       - name: Run migrations
         env:
           DATABASE_URL: postgresql://salonos_test:salonos_test_password@localhost:5432/salonos_test
-        run: psql $DATABASE_URL -f packages/backend/src/database/migrations/001_initial_schema.sql
+        run: |
+          for f in $(ls packages/backend/src/database/migrations/[0-9]*.sql | LC_ALL=C sort); do
+            echo "Aplicando $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
 
       - name: Run tests
         env:

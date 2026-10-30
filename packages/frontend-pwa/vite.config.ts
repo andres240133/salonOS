@@ -68,9 +68,13 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          state: ['zustand'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react') || id.includes('node_modules\\react')) {
+            return 'vendor';
+          }
+          if (id.includes('node_modules/zustand') || id.includes('node_modules\\zustand')) {
+            return 'state';
+          }
         },
       },
     },
